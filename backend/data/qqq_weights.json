@@ -1,0 +1,27 @@
+{
+  "index": "QQQ",
+  "name": "Invesco QQQ Trust (NASDAQ-100)",
+  "updated_at": "2026-02-27",
+  "holdings": [
+    {"ticker": "MSFT", "weight": 0.0855, "sector": "Technology"},
+    {"ticker": "AAPL", "weight": 0.0803, "sector": "Technology"},
+    {"ticker": "NVDA", "weight": 0.0782, "sector": "Technology"},
+    {"ticker": "AMZN", "weight": 0.0502, "sector": "Consumer Discretionary"},
+    {"ticker": "META", "weight": 0.0483, "sector": "Communication Services"},
+    {"ticker": "GOOGL", "weight": 0.0451, "sector": "Communication Services"},
+    {"ticker": "GOOG",  "weight": 0.0430, "sector": "Communication Services"},
+    {"ticker": "TSLA",  "weight": 0.0352, "sector": "Consumer Discretionary"},
+    {"ticker": "AVGO",  "weight": 0.0321, "sector": "Technology"},
+    {"ticker": "COST",  "weight": 0.0278, "sector": "Consumer Staples"},
+    {"ticker": "NFLX",  "weight": 0.0251, "sector": "Communication Services"},
+    {"ticker": "AMD",   "weight": 0.0181, "sector": "Technology"},
+    {"ticker": "QCOM",  "weight": 0.0152, "sector": "Technology"},
+    {"ticker": "INTC",  "weight": 0.0120, "sector": "Technology"},
+    {"ticker": "TXN",   "weight": 0.0101, "sector": "Technology"},
+    {"ticker": "ADBE",  "weight": 0.0098, "sector": "Technology"},
+    {"ticker": "CSCO",  "weight": 0.0096, "sector": "Technology"},
+    {"ticker": "PEP",   "weight": 0.0089, "sector": "Consumer Staples"},
+    {"ticker": "INTU",  "weight": 0.0083, "sector": "Technology"},
+    {"ticker": "CMCSA", "weight": 0.0071, "sector": "Communication Services"}
+  ]
+}

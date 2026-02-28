@@ -1,0 +1,38 @@
+[
+  {
+    "id": "rule-1",
+    "name": "Tech Sector Cap",
+    "prompt": "Technology sector exposure must not exceed 40% of total portfolio value",
+    "type": "hard",
+    "priority": 1,
+    "active": true,
+    "created_at": "2026-02-27T00:00:00Z"
+  },
+  {
+    "id": "rule-2",
+    "name": "Single Stock Limit",
+    "prompt": "No single stock position should exceed 8% of total portfolio value",
+    "type": "hard",
+    "priority": 2,
+    "active": true,
+    "created_at": "2026-02-27T00:00:00Z"
+  },
+  {
+    "id": "rule-3",
+    "name": "QQQ Alignment Target",
+    "prompt": "Maintain at least 70% alignment with QQQ top 10 holdings weighted allocation",
+    "type": "soft",
+    "priority": 3,
+    "active": true,
+    "created_at": "2026-02-27T00:00:00Z"
+  },
+  {
+    "id": "rule-4",
+    "name": "Minimum Cash Buffer",
+    "prompt": "Always maintain at least 3% of portfolio value in cash",
+    "type": "hard",
+    "priority": 4,
+    "active": false,
+    "created_at": "2026-02-27T00:00:00Z"
+  }
+]

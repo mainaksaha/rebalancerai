@@ -1,0 +1,13 @@
+{
+  "holdings": [
+    {"ticker": "AAPL", "shares": 10, "avg_cost": 150.0},
+    {"ticker": "MSFT", "shares": 15, "avg_cost": 380.0},
+    {"ticker": "NVDA", "shares": 5, "avg_cost": 800.0},
+    {"ticker": "GOOGL", "shares": 8, "avg_cost": 140.0},
+    {"ticker": "TSLA", "shares": 20, "avg_cost": 250.0},
+    {"ticker": "META", "shares": 12, "avg_cost": 480.0},
+    {"ticker": "AMD", "shares": 25, "avg_cost": 160.0},
+    {"ticker": "AMZN", "shares": 6, "avg_cost": 180.0}
+  ],
+  "cash_balance": 5000.0
+}
