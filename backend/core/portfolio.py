@@ -2,17 +2,7 @@ import json
 from pathlib import Path
 from typing import List, Dict, Any
 
-# ── Mock Prices (static for prototype) ───────────────────────────────────────
-MOCK_PRICES: Dict[str, float] = {
-    "AAPL": 187.44,
-    "MSFT": 415.26,
-    "NVDA": 875.39,
-    "GOOGL": 175.82,
-    "TSLA": 175.11,
-    "META": 503.42,
-    "AMD":  167.58,
-    "AMZN": 185.48,
-}
+from core.prices import get_prices
 
 SECTOR_MAP: Dict[str, str] = {
     "AAPL":  "Technology",
@@ -38,10 +28,13 @@ def get_portfolio_with_values() -> Dict[str, Any]:
     raw = load_portfolio()
     cash = raw.get("cash_balance", 0.0)
 
+    tickers = [h["ticker"] for h in raw["holdings"]]
+    prices  = get_prices(tickers)
+
     enriched: List[Dict[str, Any]] = []
     for h in raw["holdings"]:
         ticker = h["ticker"]
-        price  = MOCK_PRICES.get(ticker, 0.0)
+        price  = prices.get(ticker, 0.0)
         shares = h["shares"]
         value  = round(price * shares, 2)
         cost   = h["avg_cost"]
