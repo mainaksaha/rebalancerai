@@ -1,4 +1,5 @@
 import json
+import math
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -65,47 +66,85 @@ def get_sector_exposure() -> List[Dict[str, Any]]:
 
 
 def generate_rebalance_orders(aggressiveness: float = 0.5) -> Dict[str, Any]:
-    """Generate buy/sell orders to reduce drift toward QQQ targets."""
+    """Generate buy/sell orders to reduce drift toward QQQ targets.
+
+    All orders are whole shares only.  Two-pass approach:
+      Pass 1 — floor fractional delta to whole shares for every ticker.
+      Pass 2 — for tickers that floored to 0, promote to 1 share if we're
+               ≥50% of the way toward the next share (greedy rounding-up).
+    """
     aggressiveness = max(0.0, min(1.0, aggressiveness))
     portfolio      = get_portfolio_with_values()
     drift_data     = calculate_drift()
     total_value    = portfolio["total_value"]
     price_map      = {h["ticker"]: h["current_price"] for h in portfolio["holdings"]}
+    shares_owned   = {h["ticker"]: h["shares"]        for h in portfolio["holdings"]}
 
-    orders: List[Dict[str, Any]] = []
+    # ── Pass 1: build candidates with fractional shares floored to whole ──────
+    candidates: List[Dict[str, Any]] = []
     for row in drift_data["holdings"]:
-        ticker  = row["ticker"]
-        drift   = row["drift"]
-        cur_w   = row["current_weight"]
-        tgt_w   = row["target_weight"]
+        ticker = row["ticker"]
+        drift  = row["drift"]
+        cur_w  = row["current_weight"]
+        tgt_w  = row["target_weight"]
 
-        if abs(drift) < 1.0:      # skip negligible drift
+        if abs(drift) < 1.0:   # skip negligible drift
             continue
-        if tgt_w == 0.0:          # no QQQ target → skip
+        if tgt_w == 0.0:       # no QQQ target → skip
             continue
 
-        # Move aggressiveness% of the way toward target
-        new_w_pct    = cur_w - drift * aggressiveness
-        cur_value    = cur_w / 100 * total_value
-        new_value    = new_w_pct / 100 * total_value
-        delta_value  = new_value - cur_value
-
-        price        = price_map.get(ticker, 0.0)
+        price = price_map.get(ticker, 0.0)
         if price == 0.0:
             continue
-        delta_shares = delta_value / price
 
-        if abs(delta_shares) < 0.05:
+        # Ideal dollar move: close aggressiveness% of the gap
+        new_w_pct   = cur_w - drift * aggressiveness
+        delta_value = (new_w_pct - cur_w) / 100 * total_value   # neg=sell, pos=buy
+
+        direction    = -1 if delta_value < 0 else 1
+        ideal_shares = abs(delta_value) / price                  # fractional
+        floored      = math.floor(ideal_shares)                  # whole, toward 0
+        fractional   = ideal_shares - floored                    # leftover (0‥1)
+
+        candidates.append({
+            "ticker":         ticker,
+            "direction":      direction,
+            "price":          price,
+            "floored":        floored,
+            "fractional":     fractional,
+            "current_weight": cur_w,
+            "target_weight":  tgt_w,
+            "drift":          drift,
+        })
+
+    # ── Pass 2: promote zeros that are ≥50% of the way to next share ─────────
+    for c in candidates:
+        if c["floored"] == 0 and c["fractional"] >= 0.5:
+            c["floored"] = 1
+
+    # ── Build final orders ────────────────────────────────────────────────────
+    orders: List[Dict[str, Any]] = []
+    for c in candidates:
+        whole_shares = c["floored"]
+        if whole_shares == 0:
             continue
 
+        # Never sell more shares than owned
+        if c["direction"] == -1:
+            owned = int(shares_owned.get(c["ticker"], 0))
+            whole_shares = min(whole_shares, owned)
+            if whole_shares == 0:
+                continue
+
+        estimated_value = round(whole_shares * c["price"], 2)
         orders.append({
-            "ticker":          ticker,
-            "action":          "SELL" if delta_shares < 0 else "BUY",
-            "shares":          round(abs(delta_shares), 3),
-            "estimated_value": round(abs(delta_value), 2),
-            "current_weight":  cur_w,
-            "target_weight":   tgt_w,
-            "reason":          f"Drift {drift:+.1f}% from QQQ target ({tgt_w:.1f}%)",
+            "ticker":          c["ticker"],
+            "action":          "SELL" if c["direction"] == -1 else "BUY",
+            "shares":          whole_shares,
+            "estimated_value": estimated_value,
+            "current_weight":  c["current_weight"],
+            "target_weight":   c["target_weight"],
+            "reason":          f"Drift {c['drift']:+.1f}% from QQQ target ({c['target_weight']:.1f}%)",
         })
 
     projected = min(drift_data["alignment_score"] + aggressiveness * 20, 95.0)
@@ -113,11 +152,11 @@ def generate_rebalance_orders(aggressiveness: float = 0.5) -> Dict[str, Any]:
     return {
         "orders": sorted(orders, key=lambda x: x["estimated_value"], reverse=True),
         "summary": {
-            "total_orders":    len(orders),
-            "buys":            sum(1 for o in orders if o["action"] == "BUY"),
-            "sells":           sum(1 for o in orders if o["action"] == "SELL"),
-            "total_buy_value": round(sum(o["estimated_value"] for o in orders if o["action"] == "BUY"), 2),
-            "total_sell_value":round(sum(o["estimated_value"] for o in orders if o["action"] == "SELL"), 2),
+            "total_orders":     len(orders),
+            "buys":             sum(1 for o in orders if o["action"] == "BUY"),
+            "sells":            sum(1 for o in orders if o["action"] == "SELL"),
+            "total_buy_value":  round(sum(o["estimated_value"] for o in orders if o["action"] == "BUY"), 2),
+            "total_sell_value": round(sum(o["estimated_value"] for o in orders if o["action"] == "SELL"), 2),
         },
         "current_alignment":   drift_data["alignment_score"],
         "projected_alignment": round(projected, 1),
