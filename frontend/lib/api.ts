@@ -36,6 +36,27 @@ export const toggleRule     = (id: string, active: boolean) =>
     body: JSON.stringify({ active }),
   }).then(r => r.json())
 
+// ── Holdings CRUD ─────────────────────────────────────────────────────────────
+export const addHolding = (h: { ticker: string; shares: number; avg_cost: number }) =>
+  post('/portfolio/holdings', h)
+
+export const updateHolding = (ticker: string, h: { shares: number; avg_cost: number }) =>
+  fetch(`${API}/portfolio/holdings/${ticker}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ticker, ...h }),
+  }).then(r => { if (!r.ok) throw new Error(`PUT holdings failed: ${r.status}`); return r.json() })
+
+export const deleteHolding = (ticker: string) =>
+  fetch(`${API}/portfolio/holdings/${ticker}`, { method: 'DELETE' }).then(r => r.json())
+
+export const updateCash = (cash_balance: number) =>
+  fetch(`${API}/portfolio/cash`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cash_balance }),
+  }).then(r => { if (!r.ok) throw new Error(`PUT cash failed: ${r.status}`); return r.json() })
+
 // ── Rebalance ─────────────────────────────────────────────────────────────────
 export const getRebalancePlan = (aggressiveness: number = 0.5) =>
   post<RebalancePlan>('/rebalance', { aggressiveness })

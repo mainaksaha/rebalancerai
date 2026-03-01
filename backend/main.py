@@ -16,7 +16,10 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 from agent.rebalancer import stream_agent_response
-from core.portfolio import get_portfolio_with_values
+from core.portfolio import (
+    get_portfolio_with_values,
+    add_holding, update_holding, delete_holding, update_cash,
+)
 from core.rules import load_rules, add_rule, toggle_rule, delete_rule
 from core.calculations import calculate_drift, get_sector_exposure, generate_rebalance_orders
 
@@ -45,6 +48,46 @@ async def get_drift():
 @app.get("/portfolio/sectors")
 async def get_sectors():
     return get_sector_exposure()
+
+
+# ── Holdings CRUD endpoints ────────────────────────────────────────────────────
+
+class HoldingRequest(BaseModel):
+    ticker:   str
+    shares:   float
+    avg_cost: float
+
+
+class UpdateCashRequest(BaseModel):
+    cash_balance: float
+
+
+@app.post("/portfolio/holdings")
+async def create_holding(req: HoldingRequest):
+    try:
+        return add_holding(req.ticker, req.shares, req.avg_cost)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.put("/portfolio/holdings/{ticker}")
+async def update_holding_endpoint(ticker: str, req: HoldingRequest):
+    try:
+        return update_holding(ticker, req.shares, req.avg_cost)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.delete("/portfolio/holdings/{ticker}")
+async def delete_holding_endpoint(ticker: str):
+    delete_holding(ticker)
+    return {"status": "deleted", "ticker": ticker.upper()}
+
+
+@app.put("/portfolio/cash")
+async def update_cash_endpoint(req: UpdateCashRequest):
+    update_cash(req.cash_balance)
+    return {"cash_balance": req.cash_balance}
 
 
 # ── Rules endpoints ────────────────────────────────────────────────────────────
