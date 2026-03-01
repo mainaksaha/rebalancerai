@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { getPortfolio, addHolding, updateHolding, deleteHolding, updateCash } from '@/lib/api'
+import { getPortfolio, addHolding, updateHolding, deleteHolding, updateCash, depositCash } from '@/lib/api'
 import type { Holding } from '@/lib/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -26,11 +26,16 @@ export default function SettingsPage() {
   const [addVals,     setAddVals]     = useState<AddState>(EMPTY_ADD)
 
   // cash edit
-  const [editingCash, setEditingCash] = useState(false)
-  const [cashInput,   setCashInput]   = useState('')
+  const [editingCash,    setEditingCash]    = useState(false)
+  const [cashInput,      setCashInput]      = useState('')
+
+  // deposit
+  const [depositMode,    setDepositMode]    = useState(false)
+  const [depositInput,   setDepositInput]   = useState('')
+  const [depositSuccess, setDepositSuccess] = useState<number | null>(null)
 
   // saving spinners
-  const [saving,      setSaving]      = useState(false)
+  const [saving,         setSaving]         = useState(false)
 
   // ── Load ───────────────────────────────────────────────────────────────────
   async function load() {
@@ -111,6 +116,22 @@ export default function SettingsPage() {
       await load()
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Cash update failed')
+    } finally { setSaving(false) }
+  }
+
+  async function handleDeposit() {
+    const amount = parseFloat(depositInput)
+    if (isNaN(amount) || amount <= 0) { setError('Deposit amount must be positive'); return }
+    setSaving(true)
+    try {
+      const res = await depositCash(amount)
+      setDepositSuccess(res.deposited)
+      setDepositInput('')
+      setDepositMode(false)
+      await load()
+      setTimeout(() => setDepositSuccess(null), 4000)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Deposit failed')
     } finally { setSaving(false) }
   }
 
@@ -281,44 +302,90 @@ export default function SettingsPage() {
       </div>
 
       {/* ── Cash balance ────────────────────────────────────────────────────── */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-6 py-5 flex items-center justify-between">
-        <div>
-          <div className="text-slate-400 text-xs uppercase tracking-wide mb-1">Cash Balance</div>
-          {editingCash ? (
-            <div className="flex items-center gap-2">
-              <span className="text-white">$</span>
-              <input
-                type="number" min="0" step="0.01"
-                value={cashInput}
-                onChange={e => setCashInput(e.target.value)}
-                className="w-36 bg-slate-700 border border-blue-500/50 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500"
-                autoFocus
-              />
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-6 py-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-slate-400 text-xs uppercase tracking-wide mb-1">Cash Balance</div>
+            {editingCash ? (
+              <div className="flex items-center gap-2">
+                <span className="text-white">$</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={cashInput}
+                  onChange={e => setCashInput(e.target.value)}
+                  className="w-36 bg-slate-700 border border-blue-500/50 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-blue-500"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveCash}
+                  disabled={saving}
+                  className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => setEditingCash(false)}
+                  className="px-3 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="text-2xl font-bold text-white">${cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+            )}
+          </div>
+          {!editingCash && !depositMode && (
+            <div className="flex gap-2">
               <button
-                onClick={handleSaveCash}
-                disabled={saving}
-                className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors disabled:opacity-50"
+                onClick={() => { setDepositMode(true); setDepositInput('') }}
+                className="px-4 py-2 text-sm bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors font-medium"
               >
-                Save
+                + Deposit
               </button>
               <button
-                onClick={() => setEditingCash(false)}
-                className="px-3 py-1 text-xs bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors"
+                onClick={() => { setEditingCash(true); setCashInput(String(cash)) }}
+                className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
               >
-                Cancel
+                Set Balance
               </button>
             </div>
-          ) : (
-            <div className="text-2xl font-bold text-white">${cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
           )}
         </div>
-        {!editingCash && (
-          <button
-            onClick={() => { setEditingCash(true); setCashInput(String(cash)) }}
-            className="px-4 py-2 text-sm bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
-          >
-            Edit
-          </button>
+
+        {/* Deposit form */}
+        {depositMode && (
+          <div className="flex items-center gap-3 pt-1 border-t border-slate-700">
+            <span className="text-slate-400 text-sm">Deposit amount:</span>
+            <span className="text-white">$</span>
+            <input
+              type="number" min="0" step="0.01" placeholder="5000"
+              value={depositInput}
+              onChange={e => setDepositInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleDeposit()}
+              className="w-36 bg-slate-700 border border-green-500/50 rounded px-2 py-1.5 text-white text-sm focus:outline-none focus:border-green-500"
+              autoFocus
+            />
+            <button
+              onClick={handleDeposit}
+              disabled={saving}
+              className="px-4 py-1.5 text-sm bg-green-600 hover:bg-green-500 text-white rounded-lg transition-colors disabled:opacity-50 font-medium"
+            >
+              {saving ? 'Depositing…' : 'Confirm Deposit'}
+            </button>
+            <button
+              onClick={() => { setDepositMode(false); setDepositInput('') }}
+              className="px-3 py-1.5 text-sm bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Success banner */}
+        {depositSuccess !== null && (
+          <div className="flex items-center gap-2 text-sm text-green-300 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
+            ✅ ${depositSuccess.toLocaleString()} deposited successfully. New balance: ${cash.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+          </div>
         )}
       </div>
     </div>

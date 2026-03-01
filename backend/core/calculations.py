@@ -149,14 +149,49 @@ def generate_rebalance_orders(aggressiveness: float = 0.5) -> Dict[str, Any]:
 
     projected = min(drift_data["alignment_score"] + aggressiveness * 20, 95.0)
 
+    # ── Cash feasibility check ────────────────────────────────────────────────
+    # Sells happen first and replenish cash; check if remaining cash covers buys.
+    current_cash  = portfolio["cash_balance"]
+    sell_proceeds = sum(o["estimated_value"] for o in orders if o["action"] == "SELL")
+    available_cash = round(current_cash + sell_proceeds, 2)
+    required_cash  = round(sum(o["estimated_value"] for o in orders if o["action"] == "BUY"), 2)
+    cash_shortfall = round(max(0.0, required_cash - available_cash), 2)
+
+    # Greedily mark BUY orders as funded/unfunded (largest first already sorted)
+    remaining = available_cash
+    for o in orders:
+        if o["action"] == "SELL":
+            o["funded"] = True
+            continue
+        if remaining >= o["estimated_value"]:
+            o["funded"] = True
+            remaining = round(remaining - o["estimated_value"], 2)
+        else:
+            o["funded"] = False
+
+    buy_orders  = [o for o in orders if o["action"] == "BUY"]
+    sell_orders = [o for o in orders if o["action"] == "SELL"]
+    total_buy_value  = round(sum(o["estimated_value"] for o in buy_orders), 2)
+    total_sell_value = round(sum(o["estimated_value"] for o in sell_orders), 2)
+    funded_buy_value = round(sum(o["estimated_value"] for o in buy_orders if o["funded"]), 2)
+
     return {
         "orders": sorted(orders, key=lambda x: x["estimated_value"], reverse=True),
         "summary": {
             "total_orders":     len(orders),
-            "buys":             sum(1 for o in orders if o["action"] == "BUY"),
-            "sells":            sum(1 for o in orders if o["action"] == "SELL"),
-            "total_buy_value":  round(sum(o["estimated_value"] for o in orders if o["action"] == "BUY"), 2),
-            "total_sell_value": round(sum(o["estimated_value"] for o in orders if o["action"] == "SELL"), 2),
+            "buys":             len(buy_orders),
+            "sells":            len(sell_orders),
+            "total_buy_value":  total_buy_value,
+            "total_sell_value": total_sell_value,
+            "funded_buy_value": funded_buy_value,
+        },
+        "cash": {
+            "current_balance": current_cash,
+            "sell_proceeds":   round(sell_proceeds, 2),
+            "available":       available_cash,
+            "required":        required_cash,
+            "shortfall":       cash_shortfall,
+            "sufficient":      cash_shortfall == 0.0,
         },
         "current_alignment":   drift_data["alignment_score"],
         "projected_alignment": round(projected, 1),

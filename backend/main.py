@@ -17,11 +17,12 @@ from typing import List, Optional
 
 from agent.rebalancer import stream_agent_response
 from core.portfolio import (
-    get_portfolio_with_values,
+    get_portfolio_with_values, load_portfolio,
     add_holding, update_holding, delete_holding, update_cash,
 )
 from core.rules import load_rules, add_rule, toggle_rule, delete_rule
 from core.calculations import calculate_drift, get_sector_exposure, generate_rebalance_orders
+from core.execution import execute_rebalance_plan, get_rebalance_history
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 app = FastAPI(title="RebalancerAI API", version="0.1.0")
@@ -90,6 +91,20 @@ async def update_cash_endpoint(req: UpdateCashRequest):
     return {"cash_balance": req.cash_balance}
 
 
+class DepositRequest(BaseModel):
+    amount: float
+
+
+@app.post("/portfolio/deposit")
+async def deposit_cash(req: DepositRequest):
+    if req.amount <= 0:
+        raise HTTPException(status_code=400, detail="Deposit amount must be positive")
+    raw = load_portfolio()
+    new_balance = round(raw["cash_balance"] + req.amount, 2)
+    update_cash(new_balance)
+    return {"cash_balance": new_balance, "deposited": req.amount}
+
+
 # ── Rules endpoints ────────────────────────────────────────────────────────────
 @app.get("/rules")
 async def list_rules():
@@ -126,7 +141,7 @@ async def remove_rule(rule_id: str):
     return {"status": "deleted", "id": rule_id}
 
 
-# ── Rebalance endpoint ─────────────────────────────────────────────────────────
+# ── Rebalance endpoints ────────────────────────────────────────────────────────
 class RebalanceRequest(BaseModel):
     aggressiveness: float = 0.5
 
@@ -134,6 +149,43 @@ class RebalanceRequest(BaseModel):
 @app.post("/rebalance")
 async def rebalance(req: RebalanceRequest):
     return generate_rebalance_orders(req.aggressiveness)
+
+
+class RebalanceOrder(BaseModel):
+    ticker:          str
+    action:          str
+    shares:          int
+    estimated_value: float
+    current_weight:  float
+    target_weight:   float
+    reason:          str
+    funded:          bool = True
+
+
+class ExecuteRebalanceRequest(BaseModel):
+    orders:              List[RebalanceOrder]
+    aggressiveness:      float
+    alignment_before:    float
+    projected_alignment: float
+
+
+@app.post("/rebalance/execute")
+async def execute_rebalance(req: ExecuteRebalanceRequest):
+    orders = [o.model_dump() for o in req.orders]
+    try:
+        return execute_rebalance_plan(
+            orders,
+            req.aggressiveness,
+            req.alignment_before,
+            req.projected_alignment,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/rebalance/history")
+async def rebalance_history():
+    return get_rebalance_history()
 
 
 # ── Chat / Agent endpoint ──────────────────────────────────────────────────────

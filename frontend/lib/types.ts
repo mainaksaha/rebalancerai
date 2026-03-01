@@ -62,6 +62,7 @@ export interface RebalanceOrder {
   current_weight: number
   target_weight: number
   reason: string
+  funded: boolean
 }
 
 export interface RebalancePlan {
@@ -72,10 +73,43 @@ export interface RebalancePlan {
     sells: number
     total_buy_value: number
     total_sell_value: number
+    funded_buy_value: number
+  }
+  cash: {
+    current_balance: number
+    sell_proceeds: number
+    available: number
+    required: number
+    shortfall: number
+    sufficient: boolean
   }
   current_alignment: number
   projected_alignment: number
   aggressiveness: number
+}
+
+export interface RebalanceExecution {
+  id: string
+  executed_at: string
+  orders_executed: number
+  orders_skipped: number
+  buys: number
+  sells: number
+  total_buy_value: number
+  total_sell_value: number
+  new_cash_balance: number
+  alignment_before: number
+  alignment_after: number
+  skipped: RebalanceOrder[]
+}
+
+export interface RebalanceHistoryItem {
+  id: string
+  executed_at: string
+  orders: RebalanceOrder[]
+  aggressiveness: number
+  alignment_before: number
+  alignment_after: number
 }
 
 // ── Chat ──────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import type { Portfolio, DriftAnalysis, SectorExposure, Rule, RebalancePlan, SSEEvent } from './types'
+import type { Portfolio, DriftAnalysis, SectorExposure, Rule, RebalancePlan, RebalanceOrder, RebalanceExecution, RebalanceHistoryItem, SSEEvent } from './types'
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
@@ -60,6 +60,25 @@ export const updateCash = (cash_balance: number) =>
 // ── Rebalance ─────────────────────────────────────────────────────────────────
 export const getRebalancePlan = (aggressiveness: number = 0.5) =>
   post<RebalancePlan>('/rebalance', { aggressiveness })
+
+export const executeRebalancePlan = (
+  orders: RebalanceOrder[],
+  aggressiveness: number,
+  alignment_before: number,
+  projected_alignment: number,
+) =>
+  post<RebalanceExecution>('/rebalance/execute', {
+    orders,
+    aggressiveness,
+    alignment_before,
+    projected_alignment,
+  })
+
+export const getRebalanceHistory = () =>
+  get<RebalanceHistoryItem[]>('/rebalance/history')
+
+export const depositCash = (amount: number) =>
+  post<{ cash_balance: number; deposited: number }>('/portfolio/deposit', { amount })
 
 // ── Chat streaming ────────────────────────────────────────────────────────────
 export async function* streamChat(
