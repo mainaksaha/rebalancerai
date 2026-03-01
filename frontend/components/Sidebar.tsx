@@ -49,7 +49,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-slate-800">
-        <div className="text-xs text-slate-600">Mock data · claude-opus-4-6</div>
+        <div className="text-xs text-slate-600">Live data · gpt-4o</div>
       </div>
     </aside>
   )

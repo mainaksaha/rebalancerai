@@ -10,8 +10,8 @@
     },
     {
       "name": "frontend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "npm", "run", "dev"],
       "port": 3000,
       "cwd": "C:\\Work\\claudeTest\\rebalancerai\\frontend"
     }

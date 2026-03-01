@@ -112,90 +112,68 @@ def _evaluate_rule(rule_id: str) -> Dict[str, Any]:
     }
 
 
-# ── Tool schema definitions for Claude API ────────────────────────────────────
+# ── Tool schema definitions for OpenAI API ────────────────────────────────────
+
+def _fn(name: str, description: str, parameters: dict) -> dict:
+    return {"type": "function", "function": {"name": name, "description": description, "parameters": parameters}}
+
+_empty = {"type": "object", "properties": {}, "required": []}
 
 TOOLS = [
-    {
-        "name":        "get_portfolio_state",
-        "description": (
-            "Retrieve the complete portfolio: all holdings with their shares, "
-            "current prices, values, portfolio weights, sector, and unrealized P&L."
-        ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name":        "get_benchmark_weights",
-        "description": (
-            "Get the QQQ (NASDAQ-100) benchmark's top-10 holdings and their "
-            "target allocation weights. Use this to understand what the model "
-            "portfolio should look like."
-        ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name":        "calculate_portfolio_drift",
-        "description": (
-            "Calculate how far each holding has drifted from its QQQ target weight. "
-            "Returns an alignment score (0-100) and per-holding drift statistics."
-        ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name":        "get_sector_exposure",
-        "description": "Return the current sector allocation breakdown of the portfolio.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name":        "list_active_rules",
-        "description": (
-            "Retrieve all currently active advisor rules — the constraints and "
-            "preferences the rebalancer must respect."
-        ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
-    {
-        "name":        "evaluate_rule",
-        "description": (
-            "Check whether a specific advisor rule is currently satisfied by the portfolio. "
-            "Returns satisfied status and any violations found."
-        ),
-        "input_schema": {
+    _fn("get_portfolio_state",
+        "Retrieve the complete portfolio: all holdings with their shares, "
+        "current prices, values, portfolio weights, sector, and unrealized P&L.",
+        _empty),
+
+    _fn("get_benchmark_weights",
+        "Get the QQQ (NASDAQ-100) benchmark's top-10 holdings and their "
+        "target allocation weights. Use this to understand what the model portfolio should look like.",
+        _empty),
+
+    _fn("calculate_portfolio_drift",
+        "Calculate how far each holding has drifted from its QQQ target weight. "
+        "Returns an alignment score (0-100) and per-holding drift statistics.",
+        _empty),
+
+    _fn("get_sector_exposure",
+        "Return the current sector allocation breakdown of the portfolio.",
+        _empty),
+
+    _fn("list_active_rules",
+        "Retrieve all currently active advisor rules — the constraints and "
+        "preferences the rebalancer must respect.",
+        _empty),
+
+    _fn("evaluate_rule",
+        "Check whether a specific advisor rule is currently satisfied by the portfolio. "
+        "Returns satisfied status and any violations found.",
+        {
             "type": "object",
             "properties": {
                 "rule_id": {
                     "type":        "string",
-                    "description": "The ID of the rule to evaluate (e.g. 'rule-1').",
+                    "description": "The ID of the rule to evaluate.",
                 }
             },
             "required": ["rule_id"],
-        },
-    },
-    {
-        "name":        "generate_rebalance_orders",
-        "description": (
-            "Generate buy/sell orders to move the portfolio toward QQQ target weights. "
-            "The aggressiveness parameter controls how much of the drift to close in one pass."
-        ),
-        "input_schema": {
+        }),
+
+    _fn("generate_rebalance_orders",
+        "Generate buy/sell orders to move the portfolio toward QQQ target weights. "
+        "The aggressiveness parameter controls how much of the drift to close in one pass.",
+        {
             "type": "object",
             "properties": {
                 "aggressiveness": {
                     "type":        "number",
-                    "description": (
-                        "0.0 = minimal changes, 1.0 = fully rebalance to target. "
-                        "Default 0.5."
-                    ),
+                    "description": "0.0 = minimal changes, 1.0 = fully rebalance to target. Default 0.5.",
                 }
             },
             "required": [],
-        },
-    },
-    {
-        "name":        "get_portfolio_summary",
-        "description": (
-            "Quick snapshot: total portfolio value, equity, cash, number of holdings, "
-            "alignment score, and cash percentage."
-        ),
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-    },
+        }),
+
+    _fn("get_portfolio_summary",
+        "Quick snapshot: total portfolio value, equity, cash, number of holdings, "
+        "alignment score, and cash percentage.",
+        _empty),
 ]

@@ -1,7 +1,6 @@
 """
-Core agentic loop for the rebalancer.
+Core agentic loop for the rebalancer (OpenAI backend).
 Streams SSE-formatted events to the caller as it runs:
-  thinking_start / thinking / thinking_end
   text_start / text / text_end
   tool_call  (complete JSON)
   tool_result (complete JSON)
@@ -11,12 +10,14 @@ Streams SSE-formatted events to the caller as it runs:
 import json
 from typing import AsyncGenerator, List, Dict, Any
 
-import anthropic
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
 from agent.tools import execute_tool, TOOLS
 from core.rules import get_active_rules
 
-_client = anthropic.AsyncAnthropic()
+load_dotenv()
+_client = AsyncOpenAI()
 
 _BASE_SYSTEM = """\
 You are an intelligent portfolio rebalancing advisor with expertise in quantitative finance.
@@ -60,90 +61,112 @@ async def stream_agent_response(
 
     system = _BASE_SYSTEM + rules_section
 
-    current_messages = list(messages)
-    max_turns        = 12
+    # Build message list with system prompt prepended
+    current_messages: List[Dict[str, Any]] = [
+        {"role": "system", "content": system},
+        *messages,
+    ]
+    max_turns = 12
 
-    for turn in range(max_turns):
-        current_block_type: str | None = None
+    for _ in range(max_turns):
+        text_started = False
+        tool_calls_buf: Dict[int, Dict[str, Any]] = {}  # index → accumulated tool call
 
-        async with _client.messages.stream(
-            model="claude-opus-4-6",
-            max_tokens=4096,
-            thinking={"type": "adaptive"},
-            system=system,
-            tools=TOOLS,
-            messages=current_messages,
-        ) as stream:
-            async for event in stream:
-                # ── Block starts ──────────────────────────────────────────
-                if event.type == "content_block_start":
-                    current_block_type = event.content_block.type
-                    if current_block_type == "thinking":
-                        yield _sse({"type": "thinking_start"})
-                    elif current_block_type == "text":
+        try:
+            stream = await _client.chat.completions.create(
+                model="gpt-4o",
+                messages=current_messages,
+                tools=TOOLS,
+                tool_choice="auto",
+                stream=True,
+            )
+
+            async for chunk in stream:
+                choice = chunk.choices[0] if chunk.choices else None
+                if not choice:
+                    continue
+
+                delta = choice.delta
+
+                # ── Text content ──────────────────────────────────────────
+                if delta.content:
+                    if not text_started:
                         yield _sse({"type": "text_start"})
-                    # tool_use blocks: no streaming, captured in final_message
+                        text_started = True
+                    yield _sse({"type": "text", "content": delta.content})
 
-                # ── Content deltas ────────────────────────────────────────
-                elif event.type == "content_block_delta":
-                    dt = event.delta.type
-                    if dt == "thinking_delta":
-                        yield _sse({"type": "thinking", "content": event.delta.thinking})
-                    elif dt == "text_delta":
-                        yield _sse({"type": "text", "content": event.delta.text})
-                    # input_json_delta (tool args) — skip streaming
+                # ── Tool call fragments (accumulate) ──────────────────────
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        idx = tc.index
+                        if idx not in tool_calls_buf:
+                            tool_calls_buf[idx] = {
+                                "id":        "",
+                                "name":      "",
+                                "arguments": "",
+                            }
+                        if tc.id:
+                            tool_calls_buf[idx]["id"] = tc.id
+                        if tc.function and tc.function.name:
+                            tool_calls_buf[idx]["name"] = tc.function.name
+                        if tc.function and tc.function.arguments:
+                            tool_calls_buf[idx]["arguments"] += tc.function.arguments
 
-                # ── Block ends ────────────────────────────────────────────
-                elif event.type == "content_block_stop":
-                    if current_block_type == "thinking":
-                        yield _sse({"type": "thinking_end"})
-                    elif current_block_type == "text":
-                        yield _sse({"type": "text_end"})
+                finish_reason = choice.finish_reason
 
-            final_message = await stream.get_final_message()
+            # ── Close text block if we opened one ─────────────────────────
+            if text_started:
+                yield _sse({"type": "text_end"})
 
-        # ── Done (no more tool calls) ─────────────────────────────────────
-        if final_message.stop_reason == "end_turn":
+            # ── End turn (no tools) ───────────────────────────────────────
+            if finish_reason == "stop" or not tool_calls_buf:
+                yield _sse({"type": "done"})
+                return
+
+            # ── Execute tool calls ────────────────────────────────────────
+            # Append the assistant message with tool_calls
+            assistant_tool_calls = [
+                {
+                    "id":       tc["id"],
+                    "type":     "function",
+                    "function": {
+                        "name":      tc["name"],
+                        "arguments": tc["arguments"],
+                    },
+                }
+                for tc in sorted(tool_calls_buf.values(), key=lambda x: x["name"])
+            ]
+            current_messages.append({
+                "role":       "assistant",
+                "content":    None,
+                "tool_calls": assistant_tool_calls,
+            })
+
+            # Execute each tool and append results
+            for tc in assistant_tool_calls:
+                name  = tc["function"]["name"]
+                try:
+                    args = json.loads(tc["function"]["arguments"] or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+
+                yield _sse({"type": "tool_call", "tool": name, "args": args})
+
+                raw_result  = execute_tool(name, args)
+                result_data = json.loads(raw_result)
+
+                yield _sse({"type": "tool_result", "tool": name, "result": result_data})
+
+                current_messages.append({
+                    "role":         "tool",
+                    "tool_call_id": tc["id"],
+                    "content":      raw_result,
+                })
+
+        except Exception as exc:
+            yield _sse({"type": "error", "content": str(exc)})
             yield _sse({"type": "done"})
             return
-
-        # ── Tool use ──────────────────────────────────────────────────────
-        if final_message.stop_reason != "tool_use":
-            yield _sse({"type": "done"})
-            return
-
-        current_messages.append({"role": "assistant", "content": final_message.content})
-
-        tool_results = []
-        for block in final_message.content:
-            if block.type != "tool_use":
-                continue
-
-            # Tell the frontend what tool is being called
-            yield _sse({
-                "type": "tool_call",
-                "tool": block.name,
-                "args": block.input,
-            })
-
-            # Execute the tool
-            raw_result  = execute_tool(block.name, block.input)
-            result_data = json.loads(raw_result)
-
-            # Send result to frontend
-            yield _sse({
-                "type":   "tool_result",
-                "tool":   block.name,
-                "result": result_data,
-            })
-
-            tool_results.append({
-                "type":        "tool_result",
-                "tool_use_id": block.id,
-                "content":     raw_result,
-            })
-
-        current_messages.append({"role": "user", "content": tool_results})
 
     # Safety: max turns exceeded
     yield _sse({"type": "error", "content": "Agent reached maximum turn limit."})
